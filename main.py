@@ -300,8 +300,25 @@ async def stats(call: CallbackQuery):
     await call.answer(f"Users: {c.fetchone()[0]}", show_alert=True)
 
 # ===== RUN =====
+
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+def run_server():
+    server = HTTPServer(("0.0.0.0", 10000), Handler)
+    server.serve_forever()
+
+threading.Thread(target=run_server).start()
+
+
 async def main():
     await dp.start_polling(bot)
 
-if __name__=="__main__":
+if __name__ == "__main__":
     asyncio.run(main())
