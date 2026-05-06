@@ -316,7 +316,15 @@ def run_server():
 
 threading.Thread(target=run_server).start()
 
+# ===== CLEAR CHANNELS (ADMIN ONLY) =====
+@dp.message(F.text == "/clearchannels")
+async def clear_channels(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
 
+    c.execute("DELETE FROM channels")
+    await msg.answer("✅ All channels cleared")
+    
 async def main():
     await dp.start_polling(bot)
 
