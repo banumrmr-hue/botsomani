@@ -38,14 +38,23 @@ c.execute("CREATE TABLE IF NOT EXISTS claimed(user_id BIGINT,code TEXT,PRIMARY K
 
 # ===== FORCE SUB =====
 async def check_sub(uid):
+async def check_sub(uid):
     c.execute("SELECT chat_id FROM channels")
-    for ch in c.fetchall():
+    channels = c.fetchall()
+
+    for ch in channels:
+        chat = ch[0]
+
         try:
-            m = await bot.get_chat_member(ch[0], uid)
-            if m.status in ["left","kicked"]:
+            member = await bot.get_chat_member(chat, uid)
+
+            if member.status in ["left", "kicked"]:
                 return False
-        except:
+
+        except Exception as e:
+            print("JOIN CHECK ERROR:", e)
             return False
+
     return True
 
 # ===== MENU =====
@@ -69,12 +78,36 @@ async def start(msg: Message, command: CommandObject):
 
     if not await check_sub(uid):
         c.execute("SELECT chat_id FROM channels")
-        kb = [[InlineKeyboardButton(text="Join", url=f"https://t.me/{i[0].replace('@','')}")] for i in c.fetchall()]
-        await msg.answer("❌ Join all channels first", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        ch = c.fetchall()
+
+        kb = []
+
+        for i in ch:
+            try:
+                chat = await bot.get_chat(i[0])
+                invite = await bot.create_chat_invite_link(chat.id)
+
+                kb.append([
+                    InlineKeyboardButton(
+                        text=f"📢 {chat.title}",
+                        url=invite.invite_link
+                    )
+                ])
+            except:
+                pass
+
+        kb.append([InlineKeyboardButton(text="🔄 Check Again", callback_data="start_again")])
+
+        await msg.answer(
+            "❌ Join all channels first",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb)
+        )
         return
 
+    # user add
     c.execute("INSERT INTO users(user_id) VALUES(%s) ON CONFLICT DO NOTHING",(uid,))
 
+    # referral
     if ref and ref.isdigit():
         ref_id = int(ref)
         if ref_id != uid:
@@ -216,17 +249,27 @@ async def admin(call: CallbackQuery):
     await call.message.edit_text("👑 ADMIN PANEL", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 # ===== ADD CHANNEL =====
-class AddCh(StatesGroup): id = State()
+class AddChannel(StatesGroup):
+    chat_id = State()
 
 @dp.callback_query(F.data=="add_ch")
 async def add_ch(call: CallbackQuery, state: FSMContext):
-    await state.set_state(AddCh.id)
-    await call.message.answer("Send @channel")
+    await state.set_state(AddChannel.chat_id)
+    await call.message.answer("Send @channel or @group username")
 
-@dp.message(AddCh.id)
+@dp.message(AddChannel.chat_id)
 async def save_ch(msg: Message, state: FSMContext):
-    c.execute("INSERT INTO channels VALUES(%s)",(msg.text,))
-    await msg.answer("Added")
+    try:
+        chat = await bot.get_chat(msg.text.strip())
+
+        chat_id = str(chat.id)   # real chat_id (-100xxxx)
+
+        c.execute("INSERT INTO channels(chat_id) VALUES(%s)", (chat_id,))
+        await msg.reply(f"✅ Added: {chat.title}")
+
+    except Exception as e:
+        await msg.reply("❌ Invalid / bot not admin")
+
     await state.clear()
 
 # ===== ADD ITEM =====
