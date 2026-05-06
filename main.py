@@ -38,7 +38,6 @@ c.execute("CREATE TABLE IF NOT EXISTS claimed(user_id BIGINT,code TEXT,PRIMARY K
 
 # ===== FORCE SUB =====
 async def check_sub(uid):
-async def check_sub(uid):
     c.execute("SELECT chat_id FROM channels")
     channels = c.fetchall()
 
@@ -56,7 +55,7 @@ async def check_sub(uid):
             return False
 
     return True
-
+    
 # ===== MENU =====
 def menu(uid):
     kb = [
@@ -76,6 +75,7 @@ async def start(msg: Message, command: CommandObject):
     uid = msg.from_user.id
     ref = command.args
 
+    # ===== FORCE SUB =====
     if not await check_sub(uid):
         c.execute("SELECT chat_id FROM channels")
         ch = c.fetchall()
@@ -104,17 +104,31 @@ async def start(msg: Message, command: CommandObject):
         )
         return
 
-    # user add
-    c.execute("INSERT INTO users(user_id) VALUES(%s) ON CONFLICT DO NOTHING",(uid,))
+    # ===== CHECK USER =====
+    c.execute("SELECT 1 FROM users WHERE user_id=%s", (uid,))
+    exists = c.fetchone()
 
-    # referral
+    ref_id = None
     if ref and ref.isdigit():
         ref_id = int(ref)
-        if ref_id != uid:
-            c.execute("UPDATE users SET points=points+5 WHERE user_id=%s",(ref_id,))
+        if ref_id == uid:
+            ref_id = None
+
+    # ===== FIRST TIME USER =====
+    if not exists:
+        c.execute(
+            "INSERT INTO users(user_id, ref_by) VALUES(%s,%s)",
+            (uid, ref_id)
+        )
+
+        if ref_id:
+            c.execute(
+                "UPDATE users SET points = points + 5 WHERE user_id=%s",
+                (ref_id,)
+            )
 
     await msg.answer("✅ Bot Started", reply_markup=menu(uid))
-
+    
 # ===== POINTS =====
 @dp.callback_query(F.data=="points")
 async def pts(call: CallbackQuery):
